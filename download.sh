@@ -75,10 +75,8 @@ sed 's#"#""#g' names.dmp |\
   sed 's#^#"#g' |\
   sed 's#$#"#g' |\
   #
-  # TODO: does it make a difference if integers are quoted?
-  # disabling this for now.
   # don't quote integer ids
-  #sed -E 's#^"([0-9]+)"\t#\1\t#g' |\
+  sed -E 's#^"([0-9]+)"\t#\1\t#g' |\
   #
   # Leave null values unquoted so that they are interpreted as null,
   # not empty string. See "CSV Format" section in PostgreSQL docs:
@@ -171,6 +169,13 @@ sed 's#"#""#g' gene2pubtator |\
   awk -F '\t' -v OFS='"\t"' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' |\
   sed 's#^#"#g' |\
   sed 's#$#"#g' |\
+  #
+  # don't quote integer ids
+  # pmid
+  sed -E 's#^"([0-9]+)"\t#\1\t#g' |\
+  # gene_id
+  sed -E 's#(^|\t)"([0-9]+)"(\t|$)#\1\2\3#g' |\
+  #
   # Leave null values unquoted so that they are interpreted as null,
   # not empty string. See "CSV Format" section in PostgreSQL docs:
   # > NULL is written as an unquoted empty string, while an empty string data
@@ -218,6 +223,13 @@ sed 's#"#""#g' species2pubtator |\
   sed -E 's/^0*//g' |\
   sed 's#^#"#g' |\
   sed 's#$#"#g' |\
+  #
+  # don't quote integer ids
+  # pmid
+  sed -E 's#^"([0-9]+)"\t#\1\t#g' |\
+  # organism_id
+  sed -E 's#(^|\t)"([0-9]+)"(\t|$)#\1\2\3#g' |\
+  #
   # Leave null values unquoted so that they are interpreted as null,
   # not empty string. See "CSV Format" section in PostgreSQL docs:
   # > NULL is written as an unquoted empty string, while an empty string data
@@ -243,9 +255,23 @@ head -n 1 organism2pubtator_long.tsv >organism2pubtator_long_uniq.tsv
 #tail -n +2 organism2pubtator_long.tsv | cut -f 1,2 | sort -u >>organism2pubtator_long_uniq.tsv
 tail -n +2 organism2pubtator_long.tsv | sort -u >>organism2pubtator_long_uniq.tsv
 
+echo 'creating genes.tsv...'
 echo '#gene_id' >genes.tsv
-sort -u >>genes.tsv \
-  <(tail -n +2 gene2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $2}') \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '"?\t"?' -v OFS='\t' '{print $2}')
+# sort and take unique. exclude empties
+sort -um >>genes.tsv \
+  <(tail -n +2 gene2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $2}' | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '"?\t"?' -v OFS='\t' '{print $2}' | rg '.+' | sort -u)
 
-ls -lhisa
+echo 'creating pmids.tsv...'
+# pmcs doesn't contain all the pmids that exist in some of the other files, e.g.,
+# gene2pubmed has pmid 9873079
+echo '#pmid' >pmids.tsv
+# sort and take unique. exclude empties
+sort -um >>pmids.tsv \
+  <(tail -n +2 PMC-ids.csv | awk -F ',' -v OFS='\t' '{print $10}' | rg '.+' | sort -u) \
+  <(tail -n +2 organism2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $2}' | rg '.+' | sort -u) \
+  <(tail -n +2 organism2pubtator_long_uniq.tsv | awk -F '\t' -v OFS='\t' '{print $1}' | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $3}' | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '"?\t"?' -v OFS='\t' '{print $1}' | rg '.+' | sort -u)
+
+ls -lisha

@@ -8,7 +8,7 @@ CREATE TABLE organisms(
 );
 
 CREATE TABLE organism_names(
-	organism_id integer NOT NULL REFERENCES organisms,
+	organism_id integer NOT NULL REFERENCES organisms ON DELETE CASCADE,
 	name text NOT NULL CHECK (name <> ''),
 	name_unique text CHECK (name_unique <> ''),
 	name_class text NOT NULL CHECK (name_class <> ''),
@@ -29,26 +29,24 @@ CREATE TABLE genes(
   gene_id integer PRIMARY KEY
 );
 
-/* TODO: We don't need this table, right? */
-/*
 CREATE TABLE pmids(
-  gene_id integer PRIMARY KEY
+  pmid integer PRIMARY KEY
 );
-*/
 
 CREATE TABLE pmcs (
   pmcid text PRIMARY KEY,
-  pmid integer UNIQUE,
+	pmid integer UNIQUE NOT NULL REFERENCES pmids ON DELETE CASCADE,
   journal text CHECK (journal <> ''),
-  title text CHECK (title <> ''),
-  abstract text CHECK (abstract <> ''),
   /* surprised issn seems to have duplicates */
   issn text CHECK (issn <> ''),
   /* surprised eissn seems to have duplicates */
   eissn text CHECK (eissn <> ''),
   year integer NOT NULL,
+  /* volume needs to of type text for cases like this: "31-39" */
   volume text CHECK (volume <> ''),
+  /* issue needs to of type text for cases like this: "1-2" */
   issue text CHECK (issue <> ''),
+  /* page needs to of type text for cases like this: "i" */
   page text CHECK (page <> ''),
   /* surprised doi seems to have duplicates */
   doi text CHECK (doi <> ''),
@@ -70,21 +68,21 @@ page IS NULL OR doi IS NULL OR manuscript_id IS NULL;
 */
 
 CREATE TABLE gene2pubmed (
-	pmid integer NOT NULL REFERENCES pmcs(pmid),
-	organism_id integer NOT NULL REFERENCES organisms,
-	gene_id integer NOT NULL REFERENCES genes,
+	pmid integer NOT NULL REFERENCES pmids ON DELETE CASCADE,
+	organism_id integer NOT NULL REFERENCES organisms ON DELETE CASCADE,
+	gene_id integer NOT NULL REFERENCES genes ON DELETE CASCADE,
 	unique(gene_id, pmid)
 );
 
 CREATE TABLE organism2pubmed (
-	pmid integer NOT NULL REFERENCES pmcs(pmid),
-	organism_id integer NOT NULL REFERENCES organisms,
+	pmid integer NOT NULL REFERENCES pmids ON DELETE CASCADE,
+	organism_id integer NOT NULL REFERENCES organisms ON DELETE CASCADE,
 	unique(pmid, organism_id)
 );
 
 CREATE TABLE organism2pubtator (
-	pmid integer NOT NULL REFERENCES pmcs(pmid),
-	organism_id integer NOT NULL REFERENCES organisms,
+	pmid integer NOT NULL REFERENCES pmids ON DELETE CASCADE,
+	organism_id integer NOT NULL REFERENCES organisms ON DELETE CASCADE,
 	mention text NOT NULL CHECK (mention <> ''),
 	resource text NOT NULL CHECK (resource <> ''),
 	unique(pmid, organism_id, mention, resource)
@@ -108,8 +106,8 @@ WHERE resource IS NULL;*/
 
 /* PMID	NCBI_Gene	Mentions	Resource */
 CREATE TABLE gene2pubtator (
-	pmid integer NOT NULL REFERENCES pmcs(pmid),
-	gene_id integer NOT NULL REFERENCES genes,
+	pmid integer NOT NULL REFERENCES pmids ON DELETE CASCADE,
+	gene_id integer NOT NULL REFERENCES genes ON DELETE CASCADE,
 	mention text NOT NULL CHECK (mention <> ''),
 	resource text NOT NULL CHECK (resource <> ''),
 	unique(pmid, gene_id, mention, resource)

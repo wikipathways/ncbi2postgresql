@@ -21,6 +21,11 @@ psql -c "CREATE DATABASE $db;"
 echo "Creating tables..."
 psql "$db" -c "\i '$SCRIPT_DIR/database/create_tables.sql'"
  
+echo "Loading pmids..."
+psql "$db" -c "\copy pmids(pmid) \
+  FROM STDIN DELIMITER E'\t' CSV HEADER;" \
+  <"$pubmed_data_dir/pmids.tsv"
+
 echo "Loading pmcs..."
 psql "$db" -c "\copy pmcs(journal,issn,eissn,year,volume,issue,page,doi,pmcid,pmid,manuscript_id,release_date) \
   FROM STDIN DELIMITER ',' CSV HEADER;" \
