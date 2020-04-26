@@ -35,7 +35,7 @@ CREATE TABLE pmids(
 
 CREATE TABLE pmcs (
   pmcid text PRIMARY KEY,
-	pmid integer UNIQUE NOT NULL REFERENCES pmids ON DELETE CASCADE,
+	pmid integer UNIQUE REFERENCES pmids ON DELETE CASCADE,
   journal text CHECK (journal <> ''),
   /* surprised issn seems to have duplicates */
   issn text CHECK (issn <> ''),

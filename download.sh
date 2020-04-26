@@ -205,22 +205,27 @@ head -n 1 organism2pubtator_long.tsv >organism2pubtator_long_uniq.tsv
 tail -n +2 organism2pubtator_long.tsv | sort -u >>organism2pubtator_long_uniq.tsv
 
 echo 'creating genes.tsv...'
-echo '#gene_id' >genes.tsv
-# sort and take unique. exclude empties
+
+# add header
+echo 'gene_id' >genes.tsv
+# add values, taking only unique values and excluding both quoted and not-quoted empty values
 sort -um >>genes.tsv \
-  <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 2 | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 2 | rg '.+' | sort -u)
+  <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u)
+  #<(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 2 | rg -vP '(^|\t)""(\t|$)' | rg '.+' | sort -u)
 
 echo 'creating pmids.tsv...'
 # pmcs doesn't contain all the pmids that exist in some of the other files, e.g.,
 # gene2pubmed has pmid 9873079 but pmcs does not.
-echo '#pmid' >pmids.tsv
-# sort and take unique. exclude empties
+
+# add header
+echo 'pmid' >pmids.tsv
+# add values, taking only unique values and excluding both quoted and not-quoted empty values
 sort -um >>pmids.tsv \
-  <(tail -n +2 PMC-ids.csv | xsv select -n 10 | rg '.+' | sort -u) \
-  <(tail -n +2 organism2pubmed.tsv | xsv select -n -d '\t' 2 | rg '.+' | sort -u) \
-  <(tail -n +2 organism2pubtator_long_uniq.tsv | xsv select -n -d '\t' 1 | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 3 | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 1 | rg '.+' | sort -u)
+  <(tail -n +2 PMC-ids.csv | xsv select -n 10 | rg -v '^""$' | rg '.+' | sort -u) \
+  <(tail -n +2 organism2pubmed.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u) \
+  <(tail -n +2 organism2pubtator_long_uniq.tsv | xsv select -n -d '\t' 1 | rg -v '^""$' | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 3 | rg -v '^""$' | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 1 | rg -v '^""$' | rg '.+' | sort -u)
 
 ls -lisha
