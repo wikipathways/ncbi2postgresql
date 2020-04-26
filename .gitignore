@@ -1,0 +1,7 @@
+__pycache__/
+.Rproj.user
+.Rdata
+.Rhistory
+.Rapp.history
+*.egg-info
+MANIFEST
