@@ -260,8 +260,9 @@ echo '#gene_id' >genes.tsv
 # sort and take unique. exclude empties
 sort -um >>genes.tsv \
   <(tail -n +2 gene2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $2}' | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '"?\t"?' -v OFS='\t' '{print $2}' | rg '.+' | sort -u)
+  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '\t' -v OFS='\t' '{print $2}' | rg '.+' | sort -u)
 
+# the following doesn't work correctly
 echo 'creating pmids.tsv...'
 # pmcs doesn't contain all the pmids that exist in some of the other files, e.g.,
 # gene2pubmed has pmid 9873079
@@ -272,6 +273,6 @@ sort -um >>pmids.tsv \
   <(tail -n +2 organism2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $2}' | rg '.+' | sort -u) \
   <(tail -n +2 organism2pubtator_long_uniq.tsv | awk -F '\t' -v OFS='\t' '{print $1}' | rg '.+' | sort -u) \
   <(tail -n +2 gene2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $3}' | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '"?\t"?' -v OFS='\t' '{print $1}' | rg '.+' | sort -u)
+  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '\t' -v OFS='\t' '{print $1}' | rg '.+' | sort -u)
 
 ls -lisha

@@ -16,12 +16,12 @@ stdenv.mkDerivation rec {
 
   # Customizable development requirements
   buildInputs = [
-    libuchardet
     dos2unix
     # Add packages from nix-env -qaP | grep -i needle queries
     #imagemagick
     #inkscape
     postgresql
+    xsv
 
     # With Python configuration requiring a special wrapper
     # find names here: https://github.com/NixOS/nixpkgs/blob/release-17.03/pkgs/top-level/python-packages.nix
