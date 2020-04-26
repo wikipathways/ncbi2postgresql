@@ -35,7 +35,8 @@ CREATE TABLE pmids(
 
 CREATE TABLE pmcs (
   pmcid text PRIMARY KEY,
-	pmid integer UNIQUE REFERENCES pmids ON DELETE CASCADE,
+  /* maybe pmid has duplicates when it's both a manuscript and published? */
+	pmid integer REFERENCES pmids ON DELETE CASCADE,
   journal text CHECK (journal <> ''),
   /* surprised issn seems to have duplicates */
   issn text CHECK (issn <> ''),
