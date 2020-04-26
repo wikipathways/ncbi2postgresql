@@ -65,31 +65,24 @@ echo "pubmed_data_dir: $pubmed_data_dir"
 wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz
 tar -xzf taxdump.tar.gz names.dmp
 
-# change delimiter from '\t\|\t' to just '\t'
-# remove empty final column
-# escape quotes so that PostgreSQL doesn't think the following are duplicates:
-#10663     "T4-like viruses"               equivalent name
-#10663     T4-like viruses         equivalent name
-sed 's#"#""#g' names.dmp |\
-  awk -F '\t?\\|\t?' -v OFS='"\t"' '{print $1,$2,$3,$4}' |\
-  sed 's#^#"#g' |\
-  sed 's#$#"#g' |\
-  #
-  # don't quote integer ids
-  sed -E 's#^"([0-9]+)"\t#\1\t#g' |\
-  #
-  # Leave null values unquoted so that they are interpreted as null,
-  # not empty string. See "CSV Format" section in PostgreSQL docs:
-  # > NULL is written as an unquoted empty string, while an empty string data
-  # > value is written with double quotes (""). 
-  # https://www.postgresql.org/docs/current/sql-copy.html
-  # if in first column
-  sed 's#^""\t#\t#g' |\
-  # middle column
-  sed 's#\t""\t#\t\t#g' |\
-  # last column
-  sed 's#\t""$#\t#g' \
-  >organism_names.tsv
+if rg -qv --pcre2 '^\d+(\t\|\t)[^\t\|]*?\1[^\t\|]*?\1[^\t\|]*?\t\|$' names.dmp; then
+  echo "names.dmp includes tab and/or pipe character(s) as something other than delimiter(s)." >/dev/stderr
+  exit 1
+fi
+
+# add column headers
+echo -e 'tax_id\tname_txt\tunique name\tname class' >organism_names.tsv
+
+# remove extraneous final "delimiter"
+sed -E 's#\t\|$##g' names.dmp |\
+  # change delimiter from '\t\|\t' to just '\t'
+  sed -E 's#\t\|\t#\t#g' |\
+  # handle quoting correctly by escaping.
+  # Otherwise, PostgreSQL will think the following rows are duplicates:
+  #10663     "T4-like viruses"               equivalent name
+  #10663     T4-like viruses         equivalent name
+  xsv input -d '\t' --no-quoting |\
+  xsv fmt -t '\t' >>organism_names.tsv
 rm names.dmp taxdump.tar.gz
 
 # there are some inexplicable duplicates, e.g.:
@@ -103,7 +96,8 @@ head -n 1 organism_names.tsv >organism_names_uniq.tsv
 tail -n +2 organism_names.tsv | sort -u >>organism_names_uniq.tsv
 
 # organism scientific names
-rg -U '"scientific\sname"$' organism_names.tsv > organism_scientific_names.tsv
+xsv search -d '\t' --select 4 'scientific name' organism_names_uniq.tsv |\
+  xsv fmt -t '\t' >organism_scientific_names.tsv
 
 #####################
 # gene2pubmed
@@ -158,35 +152,15 @@ dos2unix PMC-ids.csv
 wget ftp://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator/gene2pubtator.gz
 gunzip gene2pubtator.gz
 
-# Quote fields
-sed 's#"#""#g' gene2pubtator |\
+xsv input -d '\t' --no-quoting gene2pubtator |\
+  xsv fmt -t '\t' |\
   # Reshape wide -> long
   # There can be multiple genes per row, split by ',' or ';'.
   awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' |\
   # There can be multiple Mentions per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($3,a,/\|/); for(i in a) print $1,$2,a[i],$4}' |\
   # There can be multiple Resources per row, split by '|'
-  awk -F '\t' -v OFS='"\t"' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' |\
-  sed 's#^#"#g' |\
-  sed 's#$#"#g' |\
-  #
-  # don't quote integer ids
-  # pmid
-  sed -E 's#^"([0-9]+)"\t#\1\t#g' |\
-  # gene_id
-  sed -E 's#(^|\t)"([0-9]+)"(\t|$)#\1\2\3#g' |\
-  #
-  # Leave null values unquoted so that they are interpreted as null,
-  # not empty string. See "CSV Format" section in PostgreSQL docs:
-  # > NULL is written as an unquoted empty string, while an empty string data
-  # > value is written with double quotes (""). 
-  # https://www.postgresql.org/docs/current/sql-copy.html
-  # if in first column
-  sed 's#^""\t#\t#g' |\
-  # middle column
-  sed 's#\t""\t#\t\t#g' |\
-  # last column
-  sed 's#\t""$#\t#g' \
+  awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' \
   >gene2pubtator_long.tsv
 rm gene2pubtator
 
@@ -196,10 +170,8 @@ rm gene2pubtator
 # let's remove them.
 
 # add column headers
-#head -n 1 gene2pubtator_long.tsv | cut -f 1,2 >gene2pubtator_long_uniq.tsv
 head -n 1 gene2pubtator_long.tsv >gene2pubtator_long_uniq.tsv
 # append the data
-#tail -n +2 gene2pubtator_long.tsv | cut -f 1,2 | sort -u >>gene2pubtator_long_uniq.tsv
 tail -n +2 gene2pubtator_long.tsv | sort -u >>gene2pubtator_long_uniq.tsv
 
 #####################
@@ -208,40 +180,19 @@ tail -n +2 gene2pubtator_long.tsv | sort -u >>gene2pubtator_long_uniq.tsv
 wget ftp://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator/species2pubtator.gz
 gunzip species2pubtator.gz
 
-# Quote fields
-sed 's#"#""#g' species2pubtator |\
+xsv input -d '\t' --no-quoting species2pubtator |\
+  xsv fmt -t '\t' |\
   # Reshape wide -> long
   # There can be multiple organisms per row, split by ',' or ';'
   awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' |\
   # There can be multiple Mentions per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($3,a,/\|/); for(i in a) print $1,$2,a[i],$4}' |\
   # There can be multiple Resources per row, split by '|'
-  awk -F '\t' -v OFS='"\t"' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' |\
+  awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' |\
   # There are some incorrect PMIDs. The first sed is needed to fix those.
   sed -E 's/^2[0-9]*?(27[0-9]{6}\t)/\1/g' |\
   # The second sed removes leading zeros from pmids.
-  sed -E 's/^0*//g' |\
-  sed 's#^#"#g' |\
-  sed 's#$#"#g' |\
-  #
-  # don't quote integer ids
-  # pmid
-  sed -E 's#^"([0-9]+)"\t#\1\t#g' |\
-  # organism_id
-  sed -E 's#(^|\t)"([0-9]+)"(\t|$)#\1\2\3#g' |\
-  #
-  # Leave null values unquoted so that they are interpreted as null,
-  # not empty string. See "CSV Format" section in PostgreSQL docs:
-  # > NULL is written as an unquoted empty string, while an empty string data
-  # > value is written with double quotes (""). 
-  # https://www.postgresql.org/docs/current/sql-copy.html
-  # if in first column
-  sed 's#^""\t#\t#g' |\
-  # middle column
-  sed 's#\t""\t#\t\t#g' |\
-  # last column
-  sed 's#\t""$#\t#g' \
-  >organism2pubtator_long.tsv
+  sed -E 's/^0*//g' >organism2pubtator_long.tsv
 rm species2pubtator
 
 # there are some inexplicable duplicates, e.g.:
@@ -249,30 +200,27 @@ rm species2pubtator
 # let's remove them.
 
 # add column headers
-#head -n 1 organism2pubtator_long_nonuniq.tsv | cut -f 1,2 >organism2pubtator_long_uniq.tsv
 head -n 1 organism2pubtator_long.tsv >organism2pubtator_long_uniq.tsv
 # append the data, removing duplicates
-#tail -n +2 organism2pubtator_long.tsv | cut -f 1,2 | sort -u >>organism2pubtator_long_uniq.tsv
 tail -n +2 organism2pubtator_long.tsv | sort -u >>organism2pubtator_long_uniq.tsv
 
 echo 'creating genes.tsv...'
 echo '#gene_id' >genes.tsv
 # sort and take unique. exclude empties
 sort -um >>genes.tsv \
-  <(tail -n +2 gene2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $2}' | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '\t' -v OFS='\t' '{print $2}' | rg '.+' | sort -u)
+  <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 2 | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 2 | rg '.+' | sort -u)
 
-# the following doesn't work correctly
 echo 'creating pmids.tsv...'
 # pmcs doesn't contain all the pmids that exist in some of the other files, e.g.,
-# gene2pubmed has pmid 9873079
+# gene2pubmed has pmid 9873079 but pmcs does not.
 echo '#pmid' >pmids.tsv
 # sort and take unique. exclude empties
 sort -um >>pmids.tsv \
-  <(tail -n +2 PMC-ids.csv | awk -F ',' -v OFS='\t' '{print $10}' | rg '.+' | sort -u) \
-  <(tail -n +2 organism2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $2}' | rg '.+' | sort -u) \
-  <(tail -n +2 organism2pubtator_long_uniq.tsv | awk -F '\t' -v OFS='\t' '{print $1}' | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubmed.tsv | awk -F '\t' -v OFS='\t' '{print $3}' | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | awk -F '\t' -v OFS='\t' '{print $1}' | rg '.+' | sort -u)
+  <(tail -n +2 PMC-ids.csv | xsv select -n 10 | rg '.+' | sort -u) \
+  <(tail -n +2 organism2pubmed.tsv | xsv select -n -d '\t' 2 | rg '.+' | sort -u) \
+  <(tail -n +2 organism2pubtator_long_uniq.tsv | xsv select -n -d '\t' 1 | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 3 | rg '.+' | sort -u) \
+  <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 1 | rg '.+' | sort -u)
 
 ls -lisha

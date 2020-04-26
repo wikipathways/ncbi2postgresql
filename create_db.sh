@@ -7,12 +7,12 @@ SCRIPT_DIR=$(get_script_dir)
 # see download.sh
 pubmed_data_dir="$(pwd)/tmp"
 
-db="${1:-pubmed}"
+db="${1:-pubmed5}"
 
 if psql -d "$db" -q -c "\d" >/dev/null 2>&1; then
   echo "Database $db already exists." >/dev/stderr
-  #psql -c "DROP DATABASE $db;"
-  exit 1
+  psql -c "DROP DATABASE $db;"
+  #exit 1
 fi
 
 echo "Creating database $db..."
@@ -43,20 +43,20 @@ echo "Loading organisms..."
 psql "$db" -c "CREATE TABLE temp_organism_names( \
 	organism_id integer, \
 	name text, \
-	name_unique text, \
+	unique_name text, \
 	name_class text \
 );"
 
-psql "$db" -c "\copy temp_organism_names(organism_id,name,name_unique,name_class) \
+psql "$db" -c "\copy temp_organism_names(organism_id,name,unique_name,name_class) \
               FROM STDIN DELIMITER E'\t' CSV;" \
               <"$pubmed_data_dir/organism_names_uniq.tsv"
 
 psql "$db" -c "INSERT INTO organisms(organism_id,scientific_name) \
-              SELECT organism_id,COALESCE(name_unique,name) AS scientific_name \
+              SELECT organism_id,COALESCE(unique_name,name) AS scientific_name \
               FROM temp_organism_names \
               WHERE name_class='scientific name';"
 
-psql "$db" -c "INSERT INTO organism_names(organism_id,name,name_unique,name_class) \
+psql "$db" -c "INSERT INTO organism_names(organism_id,name,unique_name,name_class) \
               SELECT * \
               FROM temp_organism_names;"
 

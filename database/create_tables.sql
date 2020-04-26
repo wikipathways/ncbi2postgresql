@@ -10,20 +10,20 @@ CREATE TABLE organisms(
 CREATE TABLE organism_names(
 	organism_id integer NOT NULL REFERENCES organisms ON DELETE CASCADE,
 	name text NOT NULL CHECK (name <> ''),
-	name_unique text CHECK (name_unique <> ''),
+	unique_name text CHECK (unique_name <> ''),
 	name_class text NOT NULL CHECK (name_class <> ''),
-	unique(organism_id, name, name_unique, name_class)
+	unique(organism_id, name, unique_name, name_class)
 );
 /* The following is an example of a partial index:
  * https://www.postgresql.org/docs/current/indexes-partial.html
- * It ensures there are no duplicates, even though name_unique can have null values.
+ * It ensures there are no duplicates, even though unique_name can have null values.
  * unique(...) specified above isn't enough, because the PostgreSQL docs say:
  * > For the purpose of a unique constraint, null values are not considered equal.
  * https://www.postgresql.org/docs/current/sql-createtable.html
  */
 CREATE UNIQUE INDEX organism_names_null_unique_idx
-ON organism_names (organism_id, name, name_unique, name_class)
-WHERE name_unique IS NULL;
+ON organism_names (organism_id, name, unique_name, name_class)
+WHERE unique_name IS NULL;
 
 CREATE TABLE genes(
   gene_id integer PRIMARY KEY
@@ -90,8 +90,8 @@ CREATE TABLE organism2pubtator (
 /* I think the following can be removed. */
 /*
 CREATE UNIQUE INDEX organism2pubtator_null_unique_idx
-ON organism2pubtator (organism_id, name, name_unique, name_class)
-WHERE name_unique IS NULL;
+ON organism2pubtator (organism_id, name, unique_name, name_class)
+WHERE unique_name IS NULL;
 */
 /* The following is an example of a partial index:
  * https://www.postgresql.org/docs/current/indexes-partial.html
