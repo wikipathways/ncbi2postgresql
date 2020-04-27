@@ -19,7 +19,7 @@ echo "Creating database $db..."
 psql -c "CREATE DATABASE $db;"
 
 echo "Creating tables..."
-psql "$db" -c "\i '$SCRIPT_DIR/database/create_tables.sql'"
+psql "$db" -c "\i '$SCRIPT_DIR/create_tables.sql'"
  
 echo "Loading pmids..."
 psql "$db" -c "\copy pmids(pmid) \
@@ -48,7 +48,7 @@ psql "$db" -c "CREATE TABLE temp_organism_names( \
 );"
 
 psql "$db" -c "\copy temp_organism_names(organism_id,name,unique_name,name_class) \
-              FROM STDIN DELIMITER E'\t' CSV;" \
+              FROM STDIN DELIMITER E'\t' CSV HEADER;" \
               <"$pubmed_data_dir/organism_names_uniq.tsv"
 
 psql "$db" -c "INSERT INTO organisms(organism_id,scientific_name) \

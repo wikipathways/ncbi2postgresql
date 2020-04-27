@@ -152,15 +152,15 @@ dos2unix PMC-ids.csv
 wget ftp://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator/gene2pubtator.gz
 gunzip gene2pubtator.gz
 
-xsv input -d '\t' --no-quoting gene2pubtator |\
-  xsv fmt -t '\t' |\
-  # Reshape wide -> long
-  # There can be multiple genes per row, split by ',' or ';'.
-  awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' |\
+# Reshape wide -> long
+# There can be multiple genes per row, split by ',' or ';'.
+awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' gene2pubtator |\
   # There can be multiple Mentions per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($3,a,/\|/); for(i in a) print $1,$2,a[i],$4}' |\
   # There can be multiple Resources per row, split by '|'
-  awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' \
+  awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' |\
+  xsv input -d '\t' --no-quoting |\
+  xsv fmt -t '\t' \
   >gene2pubtator_long.tsv
 rm gene2pubtator
 
@@ -180,18 +180,16 @@ tail -n +2 gene2pubtator_long.tsv | sort -u >>gene2pubtator_long_uniq.tsv
 wget ftp://ftp.ncbi.nlm.nih.gov/pub/lu/PubTator/species2pubtator.gz
 gunzip species2pubtator.gz
 
-xsv input -d '\t' --no-quoting species2pubtator |\
-  xsv fmt -t '\t' |\
-  # Reshape wide -> long
-  # There can be multiple organisms per row, split by ',' or ';'
-  awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' |\
+# Reshape wide -> long
+# There can be multiple organisms per row, split by ',' or ';'
+awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' species2pubtator |\
   # There can be multiple Mentions per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($3,a,/\|/); for(i in a) print $1,$2,a[i],$4}' |\
   # There can be multiple Resources per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' |\
-  # There are some incorrect PMIDs. The first sed is needed to fix those.
-  sed -E 's/^2[0-9]*?(27[0-9]{6}\t)/\1/g' |\
-  # The second sed removes leading zeros from pmids.
+  xsv input -d '\t' --no-quoting |\
+  xsv fmt -t '\t' |\
+  # Remove leading zeros from pmids.
   sed -E 's/^0*//g' >organism2pubtator_long.tsv
 rm species2pubtator
 
@@ -208,11 +206,10 @@ echo 'creating genes.tsv...'
 
 # add header
 echo 'gene_id' >genes.tsv
-# add values, taking only unique values and excluding both quoted and not-quoted empty values
+# add values, taking only unique values and excluding all empty values, both quoted and not-quoted
 sort -um >>genes.tsv \
   <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u) \
   <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u)
-  #<(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 2 | rg -vP '(^|\t)""(\t|$)' | rg '.+' | sort -u)
 
 echo 'creating pmids.tsv...'
 # pmcs doesn't contain all the pmids that exist in some of the other files, e.g.,
@@ -220,7 +217,7 @@ echo 'creating pmids.tsv...'
 
 # add header
 echo 'pmid' >pmids.tsv
-# add values, taking only unique values and excluding both quoted and not-quoted empty values
+# add values, taking only unique values and excluding all empty values, both quoted and not-quoted
 sort -um >>pmids.tsv \
   <(tail -n +2 PMC-ids.csv | xsv select -n 10 | rg -v '^""$' | rg '.+' | sort -u) \
   <(tail -n +2 organism2pubmed.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u) \
