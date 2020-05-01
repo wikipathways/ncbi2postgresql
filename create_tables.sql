@@ -1,7 +1,3 @@
-/*CREATE DATABASE pfocr2018121717;*/
-/*\c pfocr2018121717;*/
-/*SET ROLE pfocr;*/
-
 CREATE TABLE organisms(
   organism_id integer PRIMARY KEY,
 	scientific_name text NOT NULL UNIQUE CHECK ( scientific_name <> '')
@@ -54,19 +50,6 @@ CREATE TABLE pmcs (
   manuscript_id text UNIQUE CHECK (manuscript_id <> ''),
   release_date text NOT NULL CHECK (release_date <> '')
 );
-/* TODO: are either of the following needed? I think they're not. */
-/*
-CREATE UNIQUE INDEX pmcs_pmid_manuscript_id_null_unique_idx
-ON pmcs (pmid, manuscript_id)
-WHERE pmid IS NULL OR manuscript_id IS NULL;
-*/
-/*
-CREATE UNIQUE INDEX pmcs_null_unique_idx
-ON pmcs (pmcid, pmid, journal, title, abstract, issn, eissn, year, volume, issue, page, doi, manuscript_id, release_date)
-WHERE pmid IS NULL OR journal IS NULL OR title IS NULL OR abstract IS NULL OR
-issn IS NULL OR eissn IS NULL OR volume IS NULL OR issue IS NULL OR 
-page IS NULL OR doi IS NULL OR manuscript_id IS NULL;
-*/
 
 CREATE TABLE gene2pubmed (
 	pmid integer NOT NULL REFERENCES pmids ON DELETE CASCADE,
@@ -75,11 +58,17 @@ CREATE TABLE gene2pubmed (
 	unique(gene_id, pmid)
 );
 
+/* TODO: a table or a view?
 CREATE TABLE organism2pubmed (
 	pmid integer NOT NULL REFERENCES pmids ON DELETE CASCADE,
 	organism_id integer NOT NULL REFERENCES organisms ON DELETE CASCADE,
 	unique(pmid, organism_id)
 );
+*/
+
+CREATE VIEW organism2pubmed AS
+SELECT DISTINCT pmid,organism_id
+	FROM gene2pubmed;
 
 CREATE TABLE organism2pubtator (
 	pmid integer NOT NULL REFERENCES pmids ON DELETE CASCADE,
@@ -88,22 +77,6 @@ CREATE TABLE organism2pubtator (
 	resource text NOT NULL CHECK (resource <> ''),
 	unique(pmid, organism_id, mention, resource)
 );
-/* I think the following can be removed. */
-/*
-CREATE UNIQUE INDEX organism2pubtator_null_unique_idx
-ON organism2pubtator (organism_id, name, unique_name, name_class)
-WHERE unique_name IS NULL;
-*/
-/* The following is an example of a partial index:
- * https://www.postgresql.org/docs/current/indexes-partial.html
- * It ensure there are no duplicates when one of the columns is null.
- */
-/*CREATE UNIQUE INDEX organism2pubtator_mention_null_unique_idx
-ON organism2pubtator (pmid, organism_id, mention, resource)
-WHERE mention IS NULL;
-CREATE UNIQUE INDEX organism2pubtator_resource_null_unique_idx
-ON organism2pubtator (pmid, organism_id, mention, resource)
-WHERE resource IS NULL;*/
 
 /* PMID	NCBI_Gene	Mentions	Resource */
 CREATE TABLE gene2pubtator (

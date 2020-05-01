@@ -52,52 +52,65 @@ cd "$pubmed_data_dir"
 
 echo "pubmed_data_dir: $pubmed_data_dir"
 
-#####################
-# organism names from taxdump
-#####################
-#
-#Taxonomy names file (names.dmp):
-#tax_id -- the id of node associated with this name
-#name_txt -- name itself
-#unique name -- the unique variant of this name if name not unique
-#name class -- (synonym, common name, ...)
+####################################
+# organism names from taxdump.tar.gz
+# ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump_readme.txt
+####################################
+
+taxonomy_data_dir="$pubmed_data_dir/taxonomy"
+mkdir -p "$taxonomy_data_dir"
+cd "$taxonomy_data_dir"
 
 wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz
-tar -xzf taxdump.tar.gz names.dmp
+#gunzip -c taxdump.tar.gz | tar xf -
+tar -xzf taxdump.tar.gz merged.dmp names.dmp
 
-if rg -qv --pcre2 '^\d+(\t\|\t)[^\t\|]*?\1[^\t\|]*?\1[^\t\|]*?\t\|$' names.dmp; then
-  echo "names.dmp includes tab and/or pipe character(s) as something other than delimiter(s)." >/dev/stderr
-  exit 1
-fi
+# merged.dmp
+# ----------
+# Merged nodes file fields:
+# 
+# 	old_tax_id                              -- id of nodes which has been merged
+# 	new_tax_id                              -- id of nodes which is result of merging
 
-# add column headers
-echo -e 'tax_id\tname_txt\tunique name\tname class' >organism_names.tsv
-
-# remove extraneous final "delimiter"
-sed -E 's#\t\|$##g' names.dmp |\
-  # change delimiter from '\t\|\t' to just '\t'
-  sed -E 's#\t\|\t#\t#g' |\
-  # handle quoting correctly by escaping.
-  # Otherwise, PostgreSQL will think the following rows are duplicates:
-  #10663     "T4-like viruses"               equivalent name
-  #10663     T4-like viruses         equivalent name
-  xsv input -d '\t' --no-quoting |\
-  xsv fmt -t '\t' >>organism_names.tsv
-rm names.dmp taxdump.tar.gz
-
-# there are some inexplicable duplicates, e.g.:
-# 876084  |       Muschampia tessellum (Hubner, 1803)     |               |       authority       |
-# 876084  |       Muschampia tessellum (Hubner, 1803)     |               |       authority       |
-# let's remove them.
+# names.dmp
+# ---------
+# Taxonomy names file has these fields:
+# 
+# 	tax_id					-- the id of node associated with this name
+# 	name_txt				-- name itself
+# 	unique name				-- the unique variant of this name if name not unique
+# 	name class				-- (synonym, common name, ...)
 
 # add column headers
-head -n 1 organism_names.tsv >organism_names_uniq.tsv
-# append the data, removing duplicates
-tail -n +2 organism_names.tsv | sort -u >>organism_names_uniq.tsv
+echo -e 'old_tax_id\tnew_tax_id' >merged.dmp.tsv
+echo -e 'tax_id\tname_txt\tunique_name\tname_class' >names.dmp.tsv
 
-# organism scientific names
-xsv search -d '\t' --select 4 'scientific name' organism_names_uniq.tsv |\
-  xsv fmt -t '\t' >organism_scientific_names.tsv
+# convert to tsv
+for f in *.dmp; do
+  b=$(basename "$f")
+  pre_delimiter_count=$(rg -c --pcre2 '\t\|\t' "$f")
+
+  # remove extraneous final "delimiter"
+  sed -E 's#\t\|$##g' "$f" |\
+    # change delimiter from '\t\|\t' to just '\t'
+    sed -E 's#\t\|\t#\t#g' >>"$f".tmp
+
+  if rg -q '\r' "$f"; then
+    echo "$f includes carriage return(s), so cannot use as quote character." >/dev/stderr
+    exit 1
+  fi
+
+  post_delimiter_count=$(rg -c '\t' "$f".tmp)
+  if [[ $pre_delimiter_count -ne $post_delimiter_count ]]; then
+    echo "It appears there are tab characters used as something other than delimiters." >/dev/stderr
+    echo "pre: $pre_delimiter_count vs post: $post_delimiter_count" >/dev/stderr
+    exit 1
+  fi
+
+  cat "$f".tmp >>"$f".tsv
+done
+
+cd "$pubmed_data_dir"
 
 #####################
 # gene2pubmed
@@ -105,10 +118,6 @@ xsv search -d '\t' --select 4 'scientific name' organism_names_uniq.tsv |\
 wget ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/gene2pubmed.gz
 gunzip gene2pubmed.gz
 mv gene2pubmed gene2pubmed.tsv
-
-# create organism2pubmed from gene2pubmed
-head -n 1 gene2pubmed.tsv | cut -f 1,3 >organism2pubmed.tsv
-tail -n +2 gene2pubmed.tsv | cut -f 1,3 | sort -u >>organism2pubmed.tsv
 
 #####################
 # pmc2pmid
@@ -158,21 +167,16 @@ awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' g
   # There can be multiple Mentions per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($3,a,/\|/); for(i in a) print $1,$2,a[i],$4}' |\
   # There can be multiple Resources per row, split by '|'
-  awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' |\
-  xsv input -d '\t' --no-quoting |\
-  xsv fmt -t '\t' \
+  awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' \
   >gene2pubtator_long.tsv
+  #xsv input -d '\t' --no-quoting |\
+  #xsv fmt -t '\t' \
 rm gene2pubtator
 
 # there are some inexplicable duplicates, e.g.:
 # 9892355        84557,81631     light chain-3 of microtubule-associated proteins 1A and 1B      GNormPlus
 # 9892355        84557;81631     light chain-3 of microtubule-associated proteins 1A and 1B      GNormPlus
 # let's remove them.
-
-# add column headers
-head -n 1 gene2pubtator_long.tsv >gene2pubtator_long_uniq.tsv
-# append the data
-tail -n +2 gene2pubtator_long.tsv | sort -u >>gene2pubtator_long_uniq.tsv
 
 #####################
 # organism2pubtator
@@ -186,43 +190,16 @@ awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' s
   # There can be multiple Mentions per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($3,a,/\|/); for(i in a) print $1,$2,a[i],$4}' |\
   # There can be multiple Resources per row, split by '|'
-  awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' |\
-  xsv input -d '\t' --no-quoting |\
-  xsv fmt -t '\t' |\
+  awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' \
+  >organism2pubtator_long.tsv
+  #xsv input -d '\t' --no-quoting |\
+  #xsv fmt -t '\t' |\
   # Remove leading zeros from pmids.
-  sed -E 's/^0*//g' >organism2pubtator_long.tsv
+  #sed -E 's/^0*//g' \
 rm species2pubtator
 
 # there are some inexplicable duplicates, e.g.:
 # 9221901        10090;10090;10090       BALB/c  SR4GN
 # let's remove them.
-
-# add column headers
-head -n 1 organism2pubtator_long.tsv >organism2pubtator_long_uniq.tsv
-# append the data, removing duplicates
-tail -n +2 organism2pubtator_long.tsv | sort -u >>organism2pubtator_long_uniq.tsv
-
-echo 'creating genes.tsv...'
-
-# add header
-echo 'gene_id' >genes.tsv
-# add values, taking only unique values and excluding all empty values, both quoted and not-quoted
-sort -um >>genes.tsv \
-  <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u)
-
-echo 'creating pmids.tsv...'
-# pmcs doesn't contain all the pmids that exist in some of the other files, e.g.,
-# gene2pubmed has pmid 9873079 but pmcs does not.
-
-# add header
-echo 'pmid' >pmids.tsv
-# add values, taking only unique values and excluding all empty values, both quoted and not-quoted
-sort -um >>pmids.tsv \
-  <(tail -n +2 PMC-ids.csv | xsv select -n 10 | rg -v '^""$' | rg '.+' | sort -u) \
-  <(tail -n +2 organism2pubmed.tsv | xsv select -n -d '\t' 2 | rg -v '^""$' | rg '.+' | sort -u) \
-  <(tail -n +2 organism2pubtator_long_uniq.tsv | xsv select -n -d '\t' 1 | rg -v '^""$' | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubmed.tsv | xsv select -n -d '\t' 3 | rg -v '^""$' | rg '.+' | sort -u) \
-  <(tail -n +2 gene2pubtator_long_uniq.tsv | xsv select -n -d '\t' 1 | rg -v '^""$' | rg '.+' | sort -u)
 
 ls -lisha
