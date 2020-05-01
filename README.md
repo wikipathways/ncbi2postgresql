@@ -32,3 +32,7 @@ Create and load the database:
 ```
 bash create_db.sh
 ```
+
+## Related
+
+- [PubMedPortable: A Framework for Supporting the Development of Text Mining Applications](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5051953/)
