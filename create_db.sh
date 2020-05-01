@@ -84,11 +84,15 @@ echo "Loading organism..."
 psql "$db" -c "CREATE TABLE organism_names_raw AS \
               TABLE organism_names \
               WITH NO DATA;"
-# These files don't use quoting at all, so we give PostgreSQL a dummy value
+# These files don't quote any fields, so we give PostgreSQL a dummy value
 # of '\r' for the quote character, which doesn't exist in these files.
 # Otherwise, PostgreSQL would import the following rows as duplicates:
 #10663     "T4-like viruses"               equivalent name
 #10663     T4-like viruses         equivalent name
+if grep -q $'\r' "$pubmed_data_dir/taxonomy/names.dmp.tsv"; then
+  echo "file includes carriage return(s), so cannot use as quote character." >/dev/stderr
+  exit 1
+fi
 psql "$db" -c "\copy organism_names_raw(organism_id,name,unique_name,name_class) \
               FROM STDIN DELIMITER E'\t' CSV HEADER QUOTE E'\r';" \
               <"$pubmed_data_dir/taxonomy/names.dmp.tsv"
@@ -118,6 +122,12 @@ echo "Loading pubtator data..."
 psql "$db" -c "CREATE TABLE gene2pubtator_raw AS \
               TABLE gene2pubtator \
               WITH NO DATA;"
+# These files don't quote any fields, so we give PostgreSQL a dummy value
+# of '\r' for the quote character, which doesn't exist in these files.
+if grep -q $'\r' "$pubmed_data_dir/gene2pubtator_long.tsv"; then
+  echo "file includes carriage return(s), so cannot use as quote character." >/dev/stderr
+  exit 1
+fi
 #PMID    NCBI_Gene       Mentions        Resource
 psql "$db" -c "\copy gene2pubtator_raw(pmid,gene_id,mention,resource) \
               FROM STDIN DELIMITER E'\t' CSV HEADER QUOTE E'\r';" \
@@ -126,6 +136,12 @@ psql "$db" -c "\copy gene2pubtator_raw(pmid,gene_id,mention,resource) \
 psql "$db" -c "CREATE TABLE organism2pubtator_raw AS \
               TABLE organism2pubtator \
               WITH NO DATA;"
+# These files don't quote any fields, so we give PostgreSQL a dummy value
+# of '\r' for the quote character, which doesn't exist in these files.
+if grep -q $'\r' "$pubmed_data_dir/organism2pubtator_long.tsv"; then
+  echo "file includes carriage return(s), so cannot use as quote character." >/dev/stderr
+  exit 1
+fi
 #PMID    TaxID   Mentions        Resource
 psql "$db" -c "\copy organism2pubtator_raw(pmid,organism_id,mention,resource) \
               FROM STDIN DELIMITER E'\t' CSV HEADER QUOTE E'\r';" \
@@ -176,11 +192,6 @@ psql "$db" -c "INSERT INTO gene2pubmed(pmid,organism_id,gene_id) \
               INNER JOIN merged_organisms_mapper \
               ON gene2pubmed_raw.organism_id = merged_organisms_mapper.from_organism_id;"
 
-# TODO: organism2pubmed is currently created as a VIEW. Should it be a TABLE instead?
-#psql "$db" -c "INSERT INTO organism2pubmed(pmid,organism_id) \
-#              SELECT DISTINCT pmid,organism_id \
-#              FROM gene2pubmed";
-
 psql "$db" -c "INSERT INTO gene2pubtator(pmid,gene_id,mention,resource) \
               SELECT DISTINCT pmid,gene_id,mention,resource \
               FROM gene2pubtator_raw";
@@ -191,7 +202,7 @@ psql "$db" -c "INSERT INTO organism2pubtator(pmid,organism_id,mention,resource) 
               INNER JOIN merged_organisms_mapper \
               ON organism2pubtator_raw.organism_id = merged_organisms_mapper.from_organism_id;" 
 
-# TODO: should we use TEMPORARY tables instead?
+# TODO: should we specify TEMPORARY for these tables instead?
 psql "$db" -c "DROP TABLE pmcs_raw;"
 psql "$db" -c "DROP TABLE organism_names_raw;"
 psql "$db" -c "DROP TABLE gene2pubmed_raw;"

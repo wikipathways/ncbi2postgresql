@@ -87,20 +87,19 @@ echo -e 'tax_id\tname_txt\tunique_name\tname_class' >names.dmp.tsv
 
 # convert to tsv
 for f in *.dmp; do
-  b=$(basename "$f")
-  pre_delimiter_count=$(rg -c --pcre2 '\t\|\t' "$f")
+  pre_delimiter_count=$(grep -c $'\t\|\t' "$f")
 
   # remove extraneous final "delimiter"
   sed -E 's#\t\|$##g' "$f" |\
     # change delimiter from '\t\|\t' to just '\t'
     sed -E 's#\t\|\t#\t#g' >>"$f".tmp
 
-  if rg -q '\r' "$f"; then
+  if grep -q $'\r' "$f"; then
     echo "$f includes carriage return(s), so cannot use as quote character." >/dev/stderr
     exit 1
   fi
 
-  post_delimiter_count=$(rg -c '\t' "$f".tmp)
+  post_delimiter_count=$(grep -c $'\t' "$f".tmp)
   if [[ $pre_delimiter_count -ne $post_delimiter_count ]]; then
     echo "It appears there are tab characters used as something other than delimiters." >/dev/stderr
     echo "pre: $pre_delimiter_count vs post: $post_delimiter_count" >/dev/stderr
@@ -110,6 +109,7 @@ for f in *.dmp; do
   cat "$f".tmp >>"$f".tsv
 done
 
+# return to pubmed data directory
 cd "$pubmed_data_dir"
 
 #####################
@@ -130,15 +130,17 @@ gunzip PMC-ids.csv.gz
 # * line feed: '\n'
 # For more details, see:
 # https://www.cs.toronto.edu/~krueger/csc209h/tut/line-endings.html
+
+# PostgreSQL can handle importing \n or \r\n, so we don't need to worry about
+# converting line endings from Windows format to Unix format.
 #
 # At one point, PMC-ids.csv had row with a field that had a '\n' in it, but the
 # fields weren't quoted, so it wasn't possible to parse it correctly.
 # This was what the row looked like:
-# Transbound Emerg Dis,1865-1674,1865-1682,2017,65,Suppl.
-# 1,199,10.1111/tbed.12682,PMC6190748,28984428,,live^M
-#
+#   Transbound Emerg Dis,1865-1674,1865-1682,2017,65,Suppl.
+#   1,199,10.1111/tbed.12682,PMC6190748,28984428,,live^M
 # To ensure that issue doesn't crop up again, here's a check:
-if [ "$(rg -Uc '\n' PMC-ids.csv)" -ne "$(rg -Uc '\r' PMC-ids.csv)" ]; then
+if [ "$(grep -c $'\n' PMC-ids.csv)" -ne "$(grep -c $'\r' PMC-ids.csv)" ]; then
   echo 'Error in PMC-ids.csv: carriage return count not equal to line feed count.' >/dev/stderr
   echo "Look at possible fix mentioned in $PROGNAME" >/dev/stderr
   # If the issue crops up again, here's a possible fix:
@@ -151,9 +153,6 @@ if [ "$(rg -Uc '\n' PMC-ids.csv)" -ne "$(rg -Uc '\r' PMC-ids.csv)" ]; then
   # To retain line feeds in fields, an alternative fix is to quote the fields.
   exit 1
 fi
-
-# Convert line endings from Windows format to Unix format.
-dos2unix PMC-ids.csv
 
 #####################
 # gene2pubtator
@@ -169,14 +168,13 @@ awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' g
   # There can be multiple Resources per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' \
   >gene2pubtator_long.tsv
-  #xsv input -d '\t' --no-quoting |\
-  #xsv fmt -t '\t' \
 rm gene2pubtator
 
-# there are some inexplicable duplicates, e.g.:
+# There are some duplicates, e.g.:
 # 9892355        84557,81631     light chain-3 of microtubule-associated proteins 1A and 1B      GNormPlus
 # 9892355        84557;81631     light chain-3 of microtubule-associated proteins 1A and 1B      GNormPlus
-# let's remove them.
+# Does that mean the phrase above appears multiple times? Or is it a mistake?
+# I checked the abstract, it only appears once there. I didn't check the body text.
 
 #####################
 # organism2pubtator
@@ -192,14 +190,15 @@ awk -F '\t' -v OFS='\t' '{split($2,a,/,|;/); for(i in a) print $1,a[i],$3,$4}' s
   # There can be multiple Resources per row, split by '|'
   awk -F '\t' -v OFS='\t' '{split($4,a,/\|/); for(i in a) print $1,$2,$3,a[i]}' \
   >organism2pubtator_long.tsv
-  #xsv input -d '\t' --no-quoting |\
-  #xsv fmt -t '\t' |\
-  # Remove leading zeros from pmids.
-  #sed -E 's/^0*//g' \
 rm species2pubtator
 
-# there are some inexplicable duplicates, e.g.:
+# Note: some pmids are specified with leading zeros, e.g.: 02 or 0017414 or 0007502, but
+# others are specified w/out, e.g.: 3 or 4.
+# They get removed when importing into PostgreSQL as integers.
+
+# There are some duplicates, e.g.:
 # 9221901        10090;10090;10090       BALB/c  SR4GN
-# let's remove them.
+# Does that mean 'BALB/c' appears multiple times? Or is it a mistake?
+# I checked the abstract, it only appears twice there. I didn't check the body text.
 
 ls -lisha
